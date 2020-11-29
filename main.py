@@ -44,7 +44,7 @@ class Solver():
         valid_dataset = DatasetFromFolder('data/image/valid', transform=valid_transform)
 
         self.train_loader = DataLoader(dataset=train_dataset, num_workers=0, batch_size=self.train_batch_size,
-                                       shuffle=True)
+                                       shuffle=True, drop_last=True)
         self.valid_loader = DataLoader(dataset=valid_dataset, num_workers=0, batch_size=self.valid_batch_size,
                                        shuffle=False)
 
