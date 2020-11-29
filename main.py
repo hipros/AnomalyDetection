@@ -29,10 +29,12 @@ class Solver():
 
     def load_data(self):
         train_transform = transforms.Compose([
+            transforms.Resize(512),
             transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5)),
         ])
         valid_transform = transforms.Compose([
+            transforms.Resize(512),
             transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5)),
         ])
