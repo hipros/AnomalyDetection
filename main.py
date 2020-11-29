@@ -102,11 +102,11 @@ class Solver():
 
 def main():
     parser = argparse.ArgumentParser(description="NewPaerImplement")
-    parser.add_argument('--lr', default=0.01)
-    parser.add_argument('--epoch', default=100)
-    parser.add_argument('--trainBatch', default=2)
-    parser.add_argument('--validBatch', default=2)
-    parser.add_argument('--weightDecay', default=0.001)
+    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--epoch', default=1000, type=int)
+    parser.add_argument('--trainBatch', default=2, type=int)
+    parser.add_argument('--validBatch', default=2, type=int)
+    parser.add_argument('--weightDecay', default=0.001, type=float)
     parser.add_argument('--cuda', default=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
     args = parser.parse_args()
 
