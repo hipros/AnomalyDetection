@@ -19,6 +19,7 @@ class Solver():
         self.device = config.cuda
         self.epoch = config.epoch
         self.image_save = 10
+        self.image_resize = 512
 
         self.criterion = None
         self.optimizer = None
@@ -29,12 +30,12 @@ class Solver():
 
     def load_data(self):
         train_transform = transforms.Compose([
-            transforms.Resize(512),
+            transforms.Resize(self.image_resize),
             transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5)),
         ])
         valid_transform = transforms.Compose([
-            transforms.Resize(512),
+            transforms.Resize(self.image_resize),
             transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5)),
         ])
@@ -86,7 +87,7 @@ class Solver():
 
         print("loss = ", valid_loss)
         if epoch % self.image_save == 0:
-            save_image(make_grid(tensor_to_image(output), nrow=8), 'data/result/image_{}.png'.format(epoch))
+            save_image(make_grid(tensor_to_image(output, self.image_resize), nrow=8), 'data/result/image_{}.png'.format(epoch))
 
     def run(self):
         self.load_data()

@@ -25,10 +25,10 @@ class DatasetFromFolder(Dataset):
     def __len__(self):
         return len(self.image_files)
 
-def tensor_to_image(tensor_img):
+def tensor_to_image(tensor_img, img_size):
     img = 0.5 * (tensor_img)
     img = img.clamp(0, 1)
-    img = img.view(img.size(0), 1, 1024, 1024)
+    img = img.view(img.size(0), 1, img_size, img_size)
 
     return img
 
