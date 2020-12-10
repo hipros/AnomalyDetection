@@ -95,3 +95,50 @@ class CAE(nn.Module):
         x = self.decoder(x)
 
         return x
+
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        self.img_ch = 1
+        self.fc_ch = 1024
+
+        self.represent_cfg = [64, 64, 'P', 128, 128, 'P', 256, 256, 256, 256, 'P', 512, 512, 512, 512, 'P', 1024, 1024, 'P', 1024, 1024, 'P']
+        self.fc_cfg = [1024, 512, 256, 1]
+        self.represent = self.make_represent_layers()
+        self.fc = self.make_fc_layer()
+
+    def forward(self, x):
+        x = self.represent(x)
+        x = x.view(-1, self.fc_ch)
+        x = self.fc(x)
+
+        return x
+
+    def make_represent_layers(self):
+        layers = []
+        img_ch = self.img_ch
+
+        for l in self.represent_cfg:
+            if l == 'P':
+                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            else:
+                layers += [nn.Conv2d(img_ch, l, kernel_size=3, padding=1)]
+                layers += [nn.BatchNorm2d(l)]
+                layers += [nn.LeakyReLU(0.2)]
+
+                img_ch = l
+
+        return nn.Sequential(*layers)
+
+    def make_fc_layer(self):
+        layers = []
+        fc_ch = self.fc_ch
+
+        for l in self.fc_cfg:
+            layers += [nn.Linear(fc_ch, l)]
+            layers += [nn.LeakyReLU(0.2)]
+            layers += [nn.Dropout(0.3)]
+
+            fc_ch = l
+
+        return nn.Sequential(*layers)
