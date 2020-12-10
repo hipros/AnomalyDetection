@@ -2,6 +2,7 @@ import os
 from glob import glob
 
 from torch.utils.data.dataset import Dataset
+from torch.autograd.variable import Variable
 from PIL import Image
 
 
@@ -24,6 +25,15 @@ class DatasetFromFolder(Dataset):
 
     def __len__(self):
         return len(self.image_files)
+
+
+def make_ones(size, device):
+    return Variable(torch.ones(size, 1)).to(device)
+
+
+def make_zeros(size, device):
+    return Variable(torch.zeros(size, 1)).to(device)
+
 
 def tensor_to_image(tensor_img, img_size):
     img = 0.5 * (tensor_img)
