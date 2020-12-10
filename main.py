@@ -106,6 +106,7 @@ class Solver(object):
         self.model_gen.eval()
 
         for _, img in enumerate(tqdm(self.valid_loader)):
+            n = img.size(0)
             img = img.to(self.device)
             img_gen = self.model_gen(img)
 
@@ -190,7 +191,7 @@ def main():
     parser.add_argument('--weightDecay', default=0.001, type=float)
     parser.add_argument('--cuda', default=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
     parser.add_argument('--image_size', default=64, type=int)
-    parser.add_argument('--saved_model', default=None, type=str)
+    parser.add_argument('--saved_dir', default=None, type=str)
     args = parser.parse_args()
 
     solver = Solver(args)
