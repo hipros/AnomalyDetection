@@ -21,8 +21,10 @@ class Solver(object):
         self.weight_decay = config.weightDecay
         self.device = config.cuda
         self.epoch = config.epoch
-        self.image_resize = config.image_size
-        self.saved_dir_model = config.saved_dir
+        self.image_resize = config.imageSize
+        self.saved_dir_model = config.savedDir
+        self.train_dir = config.trainDir
+        self.valid_dir = config.validDir
         self.image_save = True
 
         self.criterion_gen = None
@@ -47,8 +49,8 @@ class Solver(object):
             transforms.Normalize((0.5,), (0.5,)),
         ])
 
-        train_dataset = DatasetFromFolder('data/image/train', transform=train_transform)
-        valid_dataset = DatasetFromFolder('data/image/valid', transform=valid_transform)
+        train_dataset = DatasetFromFolder(self.train_dir, transform=train_transform)
+        valid_dataset = DatasetFromFolder(self.valid_dir, transform=valid_transform)
 
         self.train_loader = DataLoader(dataset=train_dataset, num_workers=8, batch_size=self.train_batch_size,
                                        shuffle=True, drop_last=True)
@@ -101,6 +103,7 @@ class Solver(object):
     def valid(self, epoch):
         print("valid: ")
         valid_loss = 0.0
+        img_gen = None
 
         self.model_dis.eval()
         self.model_gen.eval()
@@ -188,10 +191,12 @@ def main():
     parser.add_argument('--epoch', default=1000, type=int)
     parser.add_argument('--trainBatch', default=128, type=int)
     parser.add_argument('--validBatch', default=128, type=int)
+    parser.add_argument('--trainDir', default='data/image/train', type=str)
+    parser.add_argument('--validDir', default='data/image/valid', type=str)
     parser.add_argument('--weightDecay', default=0.001, type=float)
     parser.add_argument('--cuda', default=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
-    parser.add_argument('--image_size', default=64, type=int)
-    parser.add_argument('--saved_dir', default=None, type=str)
+    parser.add_argument('--imageSize', default=64, type=int)
+    parser.add_argument('--savedDir', default=None, type=str)
     args = parser.parse_args()
 
     solver = Solver(args)
