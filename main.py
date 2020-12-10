@@ -27,10 +27,12 @@ class Solver(object):
         self.valid_dir = config.validDir
         self.image_save = True
 
-        self.criterion_gen = None
-        self.criterion_dis = None
-        self.optimizer_gen = None
-        self.optimizer_dis = None
+        self.criterion_adv_gen = None
+        self.criterion_adv_dis = None
+        self.criterion_autoEn = None
+        self.optimizer_adv_gen = None
+        self.optimizer_adv_dis = None
+        self.optimizer_autoEn = None
         self.model_gen = None
         self.model_dis = None
         self.train_loader = None
@@ -64,18 +66,22 @@ class Solver(object):
         self.model_dis = Discriminator().to(self.device)
 
         if self.saved_dir_model is not None:
-
             saved_path_gen = self.saved_model_dir + 'gen.pth'
             saved_path_dis = self.saved_model_dir + 'dis.pth'
 
             self.model_gen.load_state_dict(torch.load(saved_path_gen, map_location=self.device))
             self.model_dis.load_state_dict(torch.load(saved_path_dis, map_location=self.device))
 
-        self.criterion_gen = nn.MSELoss().to(self.device)
-        self.criterion_dis = nn.MSELoss().to(self.device)
+        self.criterion_adv_gen = nn.MSELoss().to(self.device)
+        self.criterion_adv_dis = nn.MSELoss().to(self.device)
+        self.criterion_autoEn = nn.MSELoss().to(self.device)
 
-        self.optimizer_gen = torch.optim.Adam(self.model_gen.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        self.optimizer_dis = torch.optim.Adam(self.model_dis.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        self.optimizer_adv_gen = torch.optim.Adam(self.model_gen.parameters(), lr=self.lr,
+                                                  weight_decay=self.weight_decay)
+        self.optimizer_adv_dis = torch.optim.Adam(self.model_dis.parameters(), lr=self.lr,
+                                                  weight_decay=self.weight_decay)
+        self.optimizer_autoEn = torch.optim.Adam(self.model_gen.parameters(), lr=self.lr,
+                                                 weight_decay=self.weight_decay)
 
     def train(self):
         print("train: ")
@@ -86,17 +92,21 @@ class Solver(object):
 
         for _, img in enumerate(tqdm(self.train_loader)):
             img = img.to(self.device)
-
-            # discriminator train
-            img_gen = self.model_gen(img).detach()
             img_ori = img
-            loss_dis = self.train_discriminator(img_gen, img_ori)
 
-            # generator train
+            # train autoEncoder
             img_gen = self.model_gen(img)
-            loss_gen = self.train_generator(img_gen)
+            loss_recon = self.train_autoencoder(img_gen, img_ori)
 
-            train_loss += (loss_gen.item() + loss_dis.item())
+            # train discriminator
+            img_gen = self.model_gen(img).detach()
+            loss_adv_dis = self.train_discriminator(img_gen, img_ori)
+
+            # train generator
+            img_gen = self.model_gen(img)
+            loss_adv_gen = self.train_generator(img_gen)
+
+            train_loss += (loss_adv_gen.item() + loss_adv_dis.item() + loss_recon.item())
 
         print("total loss = ", train_loss)
 
@@ -110,17 +120,18 @@ class Solver(object):
 
         for _, img in enumerate(tqdm(self.valid_loader)):
             n = img.size(0)
-            img = img.to(self.device)
-            img_gen = self.model_gen(img)
+            img_ori = img.to(self.device)
+            img_gen = self.model_gen(img_ori)
 
-            output_dis_ori = self.model_dis(img)
+            output_dis_ori = self.model_dis(img_ori)
             output_dis_gen = self.model_dis(img_gen)
 
-            loss_gen = self.criterion_gen(img_gen, img)
-            loss_dis_ori = self.criterion_dis(output_dis_ori, make_ones(n, self.device))
-            loss_dis_gen = self.criterion_dis(output_dis_gen, make_zeros(n, self.device))
+            loss_gen = self.criterion_adv_gen(img_gen, img_ori)
+            loss_dis_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
+            loss_dis_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
+            loss_recon = self.criterion_autoEn(img_ori, img_gen)
 
-            valid_loss += loss_gen.item() + loss_dis_ori.item() + loss_dis_gen.item()
+            valid_loss += loss_gen.item() + loss_dis_ori.item() + loss_dis_gen.item() + loss_recon.item()
 
         print('total valid loss = ', valid_loss)
 
@@ -143,33 +154,43 @@ class Solver(object):
         save_path_img = os.path.join(save_dir, 'gen_result.png')
         save_image(make_grid(tensor_to_image(img_gen, self.image_resize), nrow=8), save_path_img)
 
-    def train_generator(self, gen_img):
-        n = gen_img.size(0)
+    def train_autoencoder(self, img_gen, img_ori):
+        self.optimizer_autoEn.zero_grad()
 
-        self.optimizer_gen.zero_grad()
-
-        output_dis_gen = self.model_dis(gen_img)
-        loss = self.criterion_gen(output_dis_gen, make_ones(n, self.device))
+        loss = self.criterion_autoEn(img_ori, img_gen)
 
         loss.backward()
-        self.optimizer_gen.step()
+        self.optimizer_autoEn.step()
 
         return loss
 
-    def train_discriminator(self, gen_img, ori_img):
+    def train_generator(self, img_gen):
+        n = img_gen.size(0)
+
+        self.optimizer_adv_gen.zero_grad()
+
+        output_dis_gen = self.model_dis(img_gen)
+        loss = self.criterion_adv_gen(output_dis_gen, make_ones(n, self.device))
+
+        loss.backward()
+        self.optimizer_adv_gen.step()
+
+        return loss
+
+    def train_discriminator(self, img_gen, ori_img):
         n = ori_img.size(0)
 
-        self.optimizer_dis.zero_grad()
+        self.optimizer_adv_dis.zero_grad()
 
         output_dis_ori = self.model_dis(ori_img)
-        loss_ori = self.criterion_dis(output_dis_ori, make_ones(n, self.device))
+        loss_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
         loss_ori.backward()
 
-        output_dis_gen = self.model_dis(gen_img)
-        loss_gen = self.criterion_dis(output_dis_gen, make_zeros(n, self.device))
+        output_dis_gen = self.model_dis(img_gen)
+        loss_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
         loss_gen.backward()
 
-        self.optimizer_dis.step()
+        self.optimizer_adv_dis.step()
 
         return loss_ori + loss_gen
 
