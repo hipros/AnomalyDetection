@@ -1,121 +1,5 @@
 from torch import nn
-from torch import cat
-
-
-# base conv block
-class CBR(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel_size=3, stride=1, padding=1, bias=True, is_last=False):
-        super(CBR, self).__init__()
-        layer = []
-
-        layer += [nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias)]
-        layer += [nn.BatchNorm2d(out_ch)]
-
-        if not is_last:
-            layer += [nn.LeakyReLU(0.2)]
-
-        self.block = nn.Sequential(*layer)
-
-    def forward(self, x):
-        return self.block(x)
-
-
-# base conv transpose block
-class TBR(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel_size=3, stride=1, padding=1, bias=True, is_last=False):
-        super(TBR, self).__init__()
-        layer = []
-
-        layer += [nn.ConvTranspose2d(in_ch, out_ch, kernel_size, stride, padding, bias)]
-        layer += [nn.BatchNorm2d(out_ch)]
-
-        if not is_last:
-            layer += [nn.LeakyReLU(0.2)]
-
-        self.block = nn.Sequential(*layer)
-
-    def forward(self, x):
-        return self.block(x)
-
-
-# base fully connected block
-class FBR(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(FBR, self).__init__()
-        layers = []
-
-        layers += [nn.Linear(in_ch, out_ch)]
-        layers += [nn.BatchNorm1d(out_ch)]
-        layers += [nn.LeakyReLU(0.2)]
-
-        self.block = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.block(x)
-
-
-# down sampling block
-class DownBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(DownBlock, self).__init__()
-        self.down = CBR(in_ch, out_ch, 4, 2, 1)
-
-    def forward(self, x):
-        return self.down(x)
-
-
-# Up sampling block
-class UpBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(UpBlock, self).__init__()
-        self.up = TBR(in_ch, out_ch, kernel_size=3, stride=2, padding=1)
-
-    def forward(self, x):
-        return self.up(x)
-
-
-# residual encoder block
-class REncoBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(REncoBlock, self).__init__()
-        self.cbr_1 = CBR(in_ch, out_ch)
-        self.cbr_2 = CBR(out_ch, out_ch, is_last=True)
-
-        self.short = CBR(in_ch, out_ch, kernel_size=1, padding=0, is_last=True)
-
-        self.lrelu = nn.LeakyReLU(0.2)
-
-    def forward(self, x):
-        out = self.cbr_1(x)
-        out = self.cbr_2(out)
-
-        x = self.short(x)
-
-        out = self.lrelu(x+out)
-
-        return out
-
-
-# residual decoder block
-class RDecoBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(RDecoBlock, self).__init__()
-        self.tbr_1 = TBR(in_ch, out_ch)
-        self.tbr_2 = TBR(in_ch, out_ch, is_last=True)
-
-        self.short = TBR(in_ch, out_ch, kernel_size=1, padding=0, is_last=True)
-
-        self.lrelu = nn.LeakyReLU(0.2)
-
-    def forward(self, x):
-        out = self.tbr_1(x)
-        out = self.tbr_2(out)
-
-        x = self.short(x)
-
-        out = self.lrelu(x+out)
-
-        return out
+from .layer import FBR
 
 
 # plain encoder
@@ -172,76 +56,6 @@ class DecoderBlock(nn.Module):
         x = self.lrelu(x)
 
         return x
-
-
-# residual U-net auto encoder
-class RU_AE(nn.Module):
-    def __init__(self):
-        super(RU_AE, self).__init__()
-
-        self.conv_1 = REncoBlock(1, 64)
-        self.down_1 = DownBlock(64, 64)
-
-        self.conv_2 = REncoBlock(64, 128)
-        self.down_2 = DownBlock(128, 128)
-
-        self.conv_3 = REncoBlock(128, 256)
-        self.down_3 = DownBlock(256, 256)
-
-        self.conv_4 = REncoBlock(256, 512)
-        self.down_4 = DownBlock(512, 512)
-
-        self.bottom = REncoBlock(512, 1024)
-
-        self.up_4 = UpBlock(1024, 512)
-        self.convt_4 = REncoBlock(1024, 512)
-
-        self.up_3 = UpBlock(512, 256)
-        self.convt_3 = REncoBlock(512, 256)
-
-        self.up_2 = UpBlock(256, 128)
-        self.convt_2 = REncoBlock(256, 128)
-
-        self.up_1 = UpBlock(128, 64)
-        self.convt_1 = REncoBlock(128, 64)
-
-        self.top = nn.Conv2d(64, 1, kernel_size=1, stride=1, padding=0, bias=True)
-
-    def forward(self, x):
-        x_1 = self.conv_1(x)
-        x = self.down_1(x_1)
-
-        x_2 = self.conv_2(x)
-        x = self.down_2(x_2)
-
-        x_3 = self.conv_3(x)
-        x = self.down_3(x_3)
-
-        x_4 = self.conv_4(x)
-        x = self.down_4(x_4)
-
-        x = self.bottom(x)
-
-        x = self.up_4(x)
-        x = cat((x, x_4), dim=1)
-        x = self.convt_4(x)
-
-        x = self.up_3(x)
-        x = cat((x, x_3), dim=1)
-        x = self.convt_3(x)
-
-        x = self.up_2(x)
-        x = cat((x, x_2), dim=1)
-        x = self.convt_2(x)
-
-        x = self.up_1(x)
-        x = cat((x, x_1), dim=1)
-        x = self.convt_1(x)
-
-        x = self.top(x)
-
-        return x
-
 
 # plain convolution auto encoder
 class CAE(nn.Module):
@@ -309,6 +123,7 @@ class CAE(nn.Module):
 
         return nn.Sequential(*layers)
 
+
 # plain discriminator
 class Discriminator(nn.Module):
     def __init__(self):
@@ -365,7 +180,7 @@ if __name__ == '__main__':
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = RU_AE().to(device)
+    model = CAE().to(device)
 
     x = torch.randn((2, 1, 64, 64)).to(device)
 

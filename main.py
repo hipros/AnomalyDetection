@@ -5,8 +5,8 @@ import os
 from tqdm import tqdm
 from torchvision import transforms
 from torchvision.utils import save_image, make_grid
-from model import CAE, RU_AE
-from model import Discriminator
+from model.residual_unet import RU_AE
+from model.vanilla import Discriminator
 from torch import nn
 from util import DatasetFromFolder, tensor_to_image
 from util import make_ones, make_zeros
@@ -259,7 +259,7 @@ class Solver(object):
         for epoch in range(1, self.epoch + 1):
             print("\n===> epoch: {}/{}".format(epoch, self.epoch + 1))
             train()
-            valid()
+            valid(epoch)
 
 
 def main():
