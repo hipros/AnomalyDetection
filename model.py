@@ -205,7 +205,7 @@ class RU_AE(nn.Module):
         self.up_1 = UpBlock(128, 64)
         self.convt_1 = REncoBlock(128, 64)
 
-        self.top = nn.Conv2d(64, 2, kernel_size=1, stride=1, padding=0, bias=True)
+        self.top = nn.Conv2d(64, 1, kernel_size=1, stride=1, padding=0, bias=True)
 
     def forward(self, x):
         x_1 = self.conv_1(x)
@@ -305,7 +305,7 @@ class CAE(nn.Module):
         dim = self.hidden_dim * self.inc
 
         for i in range(self.mlp_layer_num):
-            layers.append(MlpBlock(dim, dim))
+            layers.append(FBR(dim, dim))
 
         return nn.Sequential(*layers)
 

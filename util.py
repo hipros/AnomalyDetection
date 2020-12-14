@@ -1,6 +1,7 @@
 import os
-from glob import glob
+import torch
 
+from glob import glob
 from torch.utils.data.dataset import Dataset
 from torch.autograd.variable import Variable
 from PIL import Image
