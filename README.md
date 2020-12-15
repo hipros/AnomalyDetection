@@ -1,2 +1,2 @@
-# AnormalyDetection
+# AnomalyDetection
  - residual U-Net + adversarial train
