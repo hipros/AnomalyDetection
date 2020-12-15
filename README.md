@@ -1,2 +1,2 @@
 # AnormalyDetection
- - GAN
+ - residual U-Net + adversarial train
