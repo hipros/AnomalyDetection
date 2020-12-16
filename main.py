@@ -27,6 +27,7 @@ class Solver(object):
         self.valid_dir = config.validDir
         self.train_type = config.trainType
         self.image_save = True
+        self.generator_train_k = 3
 
         self.criterion_adv_gen = None
         self.criterion_adv_dis = None
@@ -274,8 +275,10 @@ class Solver(object):
             img_gen = self.model_gen(img_ori).detach()
             loss_dis = train_discriminator(img_ori, img_gen)
 
-            img_gen = self.model_gen(img_ori)
-            loss_gen = train_generator(img_ori, img_gen)
+            for k in range(self.generator_train_k):
+                # train generator
+                img_gen = self.model_gen(img_ori)
+                loss_gen = train_generator(img_ori, img_gen)
 
             train_loss += (loss_dis.item() + loss_gen.item())
 
