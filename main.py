@@ -63,20 +63,26 @@ class Solver(object):
         self.dtype = torch.FloatTensor if self.device == torch.device('cpu') else torch.cuda.FloatTensor
 
     def load_model(self):
-        self.model_gen = RU_AE().to(self.device)
-        if self.saved_dir_model is not None:
-            saved_path_gen = self.saved_model_dir + 'gen.pth'
-            self.model_gen.load_state_dict(torch.load(saved_path_gen, map_location=self.device))
-        self.criterion_autoEn = nn.MSELoss().to(self.device)
-
-        self.optimizer_autoEn = torch.optim.Adam(self.model_gen.parameters(), lr=self.lr,
-                                                 weight_decay=self.weight_decay)
-
-        if self.train_type == 'adv':
+        if self.train_type == 'auto':
+            self.model_gen = RU_AE().to(self.device)
+            if self.saved_dir_model is not None:
+                saved_path_gen = self.saved_model_dir + 'gen.pth'
+                self.model_gen.load_state_dict(torch.load(saved_path_gen, map_location=self.device))
+            self.criterion_autoEn = nn.MSELoss().to(self.device)
+    
+            self.optimizer_autoEn = torch.optim.Adam(self.model_gen.parameters(), lr=self.lr,
+                                                     weight_decay=self.weight_decay)
+            
+        elif self.train_type == 'adv' or self.train_type == 'auto_adv':
+            self.model_gen = RU_AE().to(self.device)
             self.model_dis = Discriminator().to(self.device)
+
             if self.saved_dir_model is not None:
                 saved_path_dis = self.saved_model_dir + 'dis.pth'
                 self.model_dis.load_state_dict(torch.load(saved_path_dis, map_location=self.device))
+                saved_path_gen = self.saved_model_dir + 'gen.pth'
+                self.model_gen.load_state_dict(torch.load(saved_path_gen, map_location=self.device))
+
             self.criterion_adv_gen = nn.MSELoss().to(self.device)
             self.criterion_adv_dis = nn.MSELoss().to(self.device)
 
@@ -108,7 +114,7 @@ class Solver(object):
             loss_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
             loss_ori.backward()
 
-            output_dis_gen = self.model_dis(img_gen)
+            output_dis_gen = self.model_dis(i_gen)
             loss_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
             loss_gen.backward()
 
@@ -116,7 +122,7 @@ class Solver(object):
 
             return loss_ori + loss_gen
 
-        print("train: ")
+        print("adversarial train: ")
         train_loss = 0.0
 
         self.model_gen.train()
@@ -139,7 +145,7 @@ class Solver(object):
         print("total loss = ", train_loss)
 
     def valid_adv(self, epoch):
-        print("valid: ")
+        print("adversarial valid: ")
         valid_loss = 0.0
         img_gen = None
 
@@ -157,9 +163,8 @@ class Solver(object):
             loss_gen = self.criterion_adv_gen(img_gen, img_ori)
             loss_dis_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
             loss_dis_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
-            loss_recon = self.criterion_autoEn(img_ori, img_gen)
 
-            valid_loss += loss_gen.item() + loss_dis_ori.item() + loss_dis_gen.item() + loss_recon.item()
+            valid_loss += loss_gen.item() + loss_dis_ori.item() + loss_dis_gen.item()
 
         print('total valid loss = ', valid_loss)
 
@@ -182,7 +187,7 @@ class Solver(object):
 
             return loss
 
-        print("train auto encoder: ")
+        print("auto encoder train: ")
         train_loss = 0.0
 
         self.model_gen.train()
@@ -200,7 +205,7 @@ class Solver(object):
         print("total loss = ", train_loss)
 
     def valid_auto(self, epoch):
-        print("autoencoder valid: ")
+        print("auto encoder valid: ")
         valid_loss = 0.0
         img_gen = None
 
@@ -215,6 +220,89 @@ class Solver(object):
             valid_loss += loss_recon.item()
 
         print('total valid loss = ', valid_loss)
+
+        ## save results
+        save_dir = os.path.join('saved_model', str(epoch))
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+
+        self.save_model(save_dir)
+        self.save_image(save_dir, img_gen)
+
+    def train_auto_adv(self):
+        def train_discriminator(i_ori, i_gen):
+            n = i_ori.size(0)
+
+            self.optimizer_adv_dis.zero_grad()
+
+            output_dis_ori = self.model_dis(i_ori)
+            loss_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
+            loss_ori.backward()
+
+            output_dis_gen = self.model_dis(i_gen)
+            loss_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
+            loss_gen.backward()
+
+            self.optimizer_adv_dis.step()
+
+            return loss_ori + loss_gen
+        
+        def train_generator(i_ori, i_gen):
+            n = i_gen.size(0)
+
+            self.optimizer_adv_gen.zero_grad()
+
+            output_dis_gen = self.model_dis(i_gen)
+            loss = self.criterion_adv_gen(output_dis_gen, make_ones(n, self.device)) + self.criterion_adv_dis(i_ori, i_gen)
+
+            loss.backward()
+            self.optimizer_adv_gen.step()
+
+            return loss
+            
+        print("recon & adv train: ")
+
+        train_loss = 0.0
+        self.model_gen.train()
+        self.model_dis.train()
+
+        for _, img in enumerate(tqdm(self.train_loader)):
+            img = img.to(self.device)
+            img_ori = img
+            
+            # train discriminator
+            img_gen = self.model_gen(img_ori).detach()
+            loss_dis = train_discriminator(img_ori, img_gen)
+
+            img_gen = self.model_gen(img_ori)
+            loss_gen = train_generator(img_ori, img_gen)
+
+            train_loss += (loss_dis.item() + loss_gen.item())
+
+        print("total loss = ", train_loss)
+            
+    def valid_auto_adv(self, epoch):
+        print("recon & adv valid: ")
+        valid_loss = 0.0
+        self.model_gen.eval()
+        self.model_dis.eval()
+        
+        for _, img in enumerate(tqdm(self.valid_loader)):
+            n = img.size(0)
+            img = img.to(self.device)
+            img_ori = img
+
+            img_gen = self.model_gen(img_ori)
+            output_dis_ori = self.model_dis(img_ori)
+            output_dis_gen = self.model_dis(img_gen)
+            
+            loss_dis_ori = self.criterion_adv_dis(output_dis_ori, make_ones(n, self.device))
+            loss_dis_gen = self.criterion_adv_dis(output_dis_gen, make_zeros(n, self.device))
+            loss_gen = self.criterion_adv_gen(img_ori, img_gen) + self.criterion_adv_gen(output_dis_gen, make_ones(n, self.device))
+            
+            valid_loss += loss_gen.item() + loss_dis_gen.item() + loss_dis_ori.item()
+        
+        print("total loss:", valid_loss)
 
         ## save results
         save_dir = os.path.join('saved_model', str(epoch))
@@ -239,7 +327,7 @@ class Solver(object):
     def print_model(self):
         if self.train_type == 'auto':
             print(self.model_gen)
-        elif self.train_type == 'adv':
+        elif self.train_type == 'adv' or self.train_type == 'auto_adv':
             print(self.model_gen)
             print(self.model_dis)
 
@@ -248,9 +336,10 @@ class Solver(object):
             return self.train_auto, self.valid_auto
         elif self.train_type == 'adv':
             return self.train_adv, self.valid_adv
+        elif self.train_type == 'auto_adv':
+            return self.train_auto_adv, self.valid_auto_adv
 
     def run(self):
-
         self.load_data()
         self.load_model()
         self.print_model()
